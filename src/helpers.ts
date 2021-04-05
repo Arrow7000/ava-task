@@ -1,5 +1,4 @@
-import { range } from "lodash";
-import { Coords } from "./types";
+import { range, unionBy } from "lodash";
 
 export const makeMatrix = <T>(
   size: number,
@@ -52,3 +51,60 @@ export const getCellNeighbours = (
 
   return cells;
 };
+
+const projectCoords = ({ rowIndex, colIndex }: Coords) =>
+  `${rowIndex}-${colIndex}`;
+
+export const getNeighbourMap = (matrix: number[][]): AdjacentCellMap => {
+  const size = matrix.length; // assuming square matrix
+
+  const adjCellMap: AdjacentCellMap = makeMatrixDict(size, () => []);
+
+  const activeCoords = makeMatrix(size, (rowIndex, colIndex) => ({
+    rowIndex,
+    colIndex,
+  }))
+    .flat()
+    .filter(({ rowIndex, colIndex }) => matrix[rowIndex]?.[colIndex] === 1);
+
+  const recordCellNeighboursInMap = (activeCoords: Coords) => {
+    const markedCoords = makeMatrix(size, () => ({ marked: false }));
+
+    // Add cell to be mapped to itself (otherwise soltary cells will show as 0)
+    adjCellMap[activeCoords.rowIndex][activeCoords.colIndex] = unionBy(
+      adjCellMap[activeCoords.rowIndex][activeCoords.colIndex],
+      [activeCoords],
+      projectCoords
+    );
+
+    const markCellNeighbours = (cell: Coords) => {
+      const unmarkedNeighbours = getCellNeighbours(cell, size).filter(
+        (neighbour) =>
+          markedCoords[neighbour.rowIndex][neighbour.colIndex].marked === false
+      );
+
+      unmarkedNeighbours.forEach((neighbour) => {
+        markedCoords[neighbour.rowIndex][neighbour.colIndex].marked = true;
+
+        // Is cell coloured
+        if (matrix[neighbour.rowIndex][neighbour.colIndex] === 1) {
+          adjCellMap[activeCoords.rowIndex][activeCoords.colIndex] = unionBy(
+            adjCellMap[activeCoords.rowIndex][activeCoords.colIndex],
+            [neighbour],
+            projectCoords
+          );
+
+          markCellNeighbours(neighbour);
+        }
+      });
+    };
+
+    markCellNeighbours(activeCoords);
+  };
+
+  activeCoords.forEach(recordCellNeighboursInMap);
+
+  return adjCellMap;
+};
+
+export const isActiveCell = (cellValue: 0 | 1) => cellValue === 1;

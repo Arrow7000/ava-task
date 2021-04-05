@@ -1,90 +1,109 @@
-import React, { useState } from "react";
-import { makeMatrix, getCellNeighbours, makeMatrixDict } from "./helpers";
+import React, { useEffect, useMemo, useState } from "react";
+import { makeMatrix, getNeighbourMap, isActiveCell } from "./helpers";
 import "./styles.css";
-import { AdjacentCellMap, Coords } from "./types";
-
-const size = 35;
-
-const getNeighbourMap = (matrix: number[][]): AdjacentCellMap => {
-  const adjCellMap: AdjacentCellMap = makeMatrixDict(size, () => []);
-
-  const activeCoords = makeMatrix(size, (rowIndex, colIndex) => ({
-    rowIndex,
-    colIndex,
-  }))
-    .flat()
-    .filter(({ rowIndex, colIndex }) => matrix[rowIndex]?.[colIndex] === 1);
-
-  const recordCellNeighboursInMap = (activeCoords: Coords) => {
-    const markedCoords = makeMatrix(size, () => ({ marked: false }));
-    adjCellMap[activeCoords.rowIndex][activeCoords.colIndex].push(activeCoords);
-
-    const markCellNeighbours = (cell: Coords) => {
-      const unmarkedNeighbours = getCellNeighbours(cell, size).filter(
-        (neighbour) =>
-          markedCoords[neighbour.rowIndex][neighbour.colIndex].marked === false
-      );
-
-      unmarkedNeighbours.forEach((neighbour) => {
-        markedCoords[neighbour.rowIndex][neighbour.colIndex].marked = true;
-
-        // is cell coloured
-        if (matrix[neighbour.rowIndex][neighbour.colIndex] === 1) {
-          adjCellMap[activeCoords.rowIndex][activeCoords.colIndex].push(
-            neighbour
-          );
-
-          markCellNeighbours(neighbour);
-        }
-      });
-    };
-
-    markCellNeighbours(activeCoords);
-  };
-
-  activeCoords.forEach(recordCellNeighboursInMap);
-
-  return adjCellMap;
-};
-
-const matrix = makeMatrix(size, () => Math.round(Math.random()));
-
-const neighbourMap = getNeighbourMap(matrix);
 
 export default function App() {
-  const [activeCoord, setActiveCoord] = useState<Coords | null>(null);
+  const [clickedCoord, setClickedCoord] = useState<Coords | null>(null);
+  const [hoveredCoord, setHoveredCoord] = useState<Coords | null>(null);
+
+  const [activeColour, setActiveColour] = useState<string | null>(null);
+  const [hoverColour, setHoverColour] = useState<string | null>(null);
+
+  const [size, setSize] = useState(10);
+
+  const matrix = useMemo(
+    () => makeMatrix(size, () => Math.round(Math.random())),
+    [size]
+  );
+
+  const neighbourMap = useMemo(() => getNeighbourMap(matrix), [matrix]);
+
+  const root = document.documentElement;
+
+  useEffect(() => {
+    if (activeColour) {
+      root.style.setProperty("--active-colour", activeColour);
+    }
+  }, [activeColour]);
+
+  useEffect(() => {
+    if (hoverColour) {
+      root.style.setProperty("--hover-colour", hoverColour);
+    }
+  }, [hoverColour]);
 
   return (
     <div className="App">
-      <table>
-        <tbody>
-          {matrix.map((row, i) => (
-            <tr key={i}>
-              {row.map((num, j) => {
-                const isContiguous =
-                  activeCoord &&
-                  neighbourMap[activeCoord.rowIndex]?.[
-                    activeCoord.colIndex
-                  ]?.filter(
-                    ({ rowIndex, colIndex }) => rowIndex === i && colIndex === j
-                  ).length > 0;
+      <input
+        className="slider"
+        min={5}
+        max={25}
+        step={1}
+        type="range"
+        value={size}
+        onChange={(e) => setSize(+e.target.value)}
+      />
+      <div className="colour-pickers">
+        <input
+          className="colour-picker"
+          type="color"
+          onChange={(e) => setActiveColour(e.target.value)}
+        />
+        <label className="colour-picker-label">Active colour</label>
+        <input
+          className="colour-picker"
+          type="color"
+          onChange={(e) => setHoverColour(e.target.value)}
+        />
+        <label className="colour-picker-label">Hover colour</label>
+      </div>
+      <div className="table">
+        {matrix.map((row, i) => (
+          <div key={i} className="row">
+            {row.map((cell, j) => {
+              const isClickedCoord =
+                clickedCoord &&
+                clickedCoord.rowIndex === i &&
+                clickedCoord.colIndex === j;
 
-                return (
-                  <td
-                    onClick={() => {
-                      setActiveCoord({ rowIndex: i, colIndex: j });
-                    }}
-                    key={j}
-                    className={`${num === 1 ? "active" : ""} ${
-                      isContiguous ? "is-contiguous" : ""
-                    }`}
-                  />
-                );
-              })}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+              const isActive = isActiveCell(cell as 0 | 1);
+
+              const hoverNeighbours =
+                hoveredCoord &&
+                neighbourMap[hoveredCoord.rowIndex]?.[hoveredCoord.colIndex];
+
+              const isContiguous = hoverNeighbours
+                ? hoverNeighbours.filter(
+                    ({ rowIndex, colIndex }) => rowIndex === i && colIndex === j
+                  ).length > 0
+                : false;
+
+              const clickNeighbours =
+                clickedCoord &&
+                neighbourMap[clickedCoord.rowIndex]?.[clickedCoord.colIndex];
+
+              return (
+                <div
+                  onMouseEnter={() =>
+                    setHoveredCoord({ rowIndex: i, colIndex: j })
+                  }
+                  onClick={() => setClickedCoord({ rowIndex: i, colIndex: j })}
+                  key={j}
+                  className={`cell ${isActive ? "active" : ""} ${
+                    hoveredCoord && isActive && isContiguous
+                      ? "is-contiguous"
+                      : ""
+                  }`}
+                >
+                  {isClickedCoord && isActive && clickNeighbours
+                    ? clickNeighbours.length
+                    : null}
+                </div>
+              );
+            })}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
